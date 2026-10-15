@@ -678,7 +678,7 @@ export function pickDefaultHardware(hwProfiles, variant, recipe) {
 //
 // `docker_image` shapes:
 //   "vllm/vllm-openai:x"               (NVIDIA-only)
-//   { nvidia, amd, tpu }               (brand-keyed; each value is a string)
+//   { nvidia, amd, tpu, intel, musa }  (brand-keyed; each value is a string)
 //   { cu129, cu130 }                   (NVIDIA CUDA-keyed — explicit paired tags,
 //                                        auto-suffix is skipped in favor of these)
 //   { nvidia: { cu129, cu130 }, amd, tpu }  (mixed: NVIDIA value may be a CUDA map)
@@ -740,23 +740,34 @@ export function computeDockerMeta(recipe, variant, hwProfile, hwId = null) {
         nvidia: "vllm/vllm-openai:nightly",
         amd: "vllm/vllm-openai-rocm:nightly",
         tpu: "vllm/vllm-tpu:nightly",
+        musa: "registry.mthreads.com/mcconline/inference/vllm/vllm-openai:v0.28.0",
       }
     : {
         nvidia: "vllm/vllm-openai:latest",
         amd: "vllm/vllm-openai-rocm:latest",
         tpu: "vllm/vllm-tpu:latest",
         intel: "vllm/vllm-openai-cpu:latest-x86_64",
+        musa: "registry.mthreads.com/mcconline/inference/vllm/vllm-openai:v0.28.0",
       };
   const isAmd = hwProfile?.brand === "AMD";
   const isTpu = hwProfile?.generation === "tpu";
   const isXpu = hwProfile?.generation === "xpu";
   const isIntel = hwProfile?.generation === "cpu" || isXpu || hwProfile?.brand === "Intel";
   const isNpu = hwProfile?.generation === "npu";
+  const isMusa = hwProfile?.generation === "musa";
   const npuDeviceCount = isNpu ? hwProfile?.gpu_count ?? 1 : 0;
   // Ascend deliberately has no `brandKey` of its own: vLLM publishes no NPU
   // image, so every Ascend recipe pins one through `hardware_overrides`, which
   // `exactHardwareOverride` resolves before the brand defaults are consulted.
-  const brandKey = isTpu ? "tpu" : isAmd ? "amd" : isIntel ? "intel" : "nvidia";
+  const brandKey = isTpu
+    ? "tpu"
+    : isAmd
+      ? "amd"
+      : isIntel
+        ? "intel"
+        : isMusa
+          ? "musa"
+          : "nvidia";
   // Exact variant+hardware image overrides win over variant-wide and
   // model-wide images (for example, an MI355X-only ROCm nightly).
   const exactHardwareOverride = hwId
@@ -786,7 +797,7 @@ export function computeDockerMeta(recipe, variant, hwProfile, hwId = null) {
       return;
     }
     if (typeof override === "object") {
-      const isBrandKeyed = "nvidia" in override || "amd" in override || "tpu" in override || "intel" in override;
+      const isBrandKeyed = "nvidia" in override || "amd" in override || "tpu" in override || "intel" in override || "musa" in override;
       if (isBrandKeyed) {
         const brandValue = override[brandKey];
         if (typeof brandValue === "string") pinned = brandValue;
@@ -817,6 +828,8 @@ export function computeDockerMeta(recipe, variant, hwProfile, hwId = null) {
       ? "--device /dev/dri \\\n  -v /dev/dri/by-path:/dev/dri/by-path --shm-size=16g"
     : isNpu
       ? ascendDockerFlags(npuDeviceCount)
+    : isMusa
+      ? "-e MTHREADS_VISIBLE_DEVICES=all"
     : isIntel
       ? "--shm-size=16g"	
       : "--gpus all";
@@ -829,6 +842,7 @@ export function computeDockerMeta(recipe, variant, hwProfile, hwId = null) {
     isXpu,
     isIntel,
     isNpu,
+    isMusa,
     npuDeviceCount,
     pinned,
     cudaMap,
@@ -854,6 +868,9 @@ function dockerGpuArgv(meta) {
   }
   if (meta.isNpu) {
     return ascendDockerArgv(meta.npuDeviceCount);
+  }
+  if (meta.isMusa) {
+    return ["-e", "MTHREADS_VISIBLE_DEVICES=all"];
   }
   if (meta.isIntel) {
     return ["--shm-size", "16g"];
@@ -902,7 +919,7 @@ function servedPort(tokens, fallback = 8000) {
 // image's entrypoint is `vllm serve`, so we pass MODEL and the trailing args as
 // CMD. `cmdPrefix` (e.g. "vllm serve") is restated before MODEL for images whose
 // entrypoint is something else. Env vars become `-e KEY=VAL` inside the container.
-export function buildDockerRun({ command, env, image, gpuFlags, port = null, isNpu = false, cmdPrefix = null, setupCommand = null, hostNetwork = false }) {
+export function buildDockerRun({ command, env, image, gpuFlags, port = null, isNpu = false, isMusa = false, cmdPrefix = null, setupCommand = null, hostNetwork = false }) {
   const pubPort = port ?? servedPort(command.split(/\s+/));
   const envFlags = Object.entries(env || {})
     .map(([k, v]) => `-e ${k}=${v}`)
@@ -924,7 +941,7 @@ export function buildDockerRun({ command, env, image, gpuFlags, port = null, isN
   const serveBody = command.replace(/^vllm serve \S+\s*\\?\n?\s*/, "");
   // Ascend uses host networking and an explicit shm size; `-p` is a no-op
   // under `--net=host` and hid the required `--shm-size` on 950PR.
-  const runtimeFlags = isNpu
+  const runtimeFlags = isNpu || isMusa
     ? "--privileged --net=host --shm-size=16g"
     : `--privileged --ipc=host ${hostNetwork ? "--network host" : `-p ${pubPort}:${pubPort}`}`;
   const base = `${prereq}docker run ${gpuFlags} \\
@@ -954,7 +971,7 @@ export function buildDockerArgv({ argv, env, meta, port = null }) {
   for (const m of [...localModelMount(cmdArgs[0]), ...configPathMounts(env)]) {
     mountFlags.push("-v", m);
   }
-  const runtimeFlags = meta.isNpu
+  const runtimeFlags = meta.isNpu || meta.isMusa
     ? ["--privileged", "--net=host", "--shm-size", "16g"]
     : ["--privileged", "--ipc=host", "-p", `${pubPort}:${pubPort}`];
   const base = [

@@ -374,7 +374,8 @@ function dockerize(command, argv, env, dockerMeta, port = null) {
   return {
     docker_command: buildDockerRun({
       command, env, image: dockerMeta.image, gpuFlags: dockerMeta.gpuFlags, port,
-      isNpu: dockerMeta.isNpu, cmdPrefix: dockerMeta.cmdPrefix,
+      isNpu: dockerMeta.isNpu, isMusa: dockerMeta.isMusa,
+      cmdPrefix: dockerMeta.cmdPrefix,
     }),
     docker_argv: buildDockerArgv({ argv, env, meta: dockerMeta, port }),
   };
