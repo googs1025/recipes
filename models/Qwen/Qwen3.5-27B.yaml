@@ -80,6 +80,10 @@ hardware_opt_in_features:
     - reasoning
     - encoder_parallel
 
+frontend_hardware:
+  rust:
+    mtt_s5000_2x: unsupported
+
 variants:
   default:
     precision: bf16

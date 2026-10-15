@@ -180,4 +180,5 @@ test("Qwen3.5-27B renders its documented 2x S5000 serving profile", () => {
   assert.equal(result.env.VLLM_WORKER_MULTIPROC_METHOD, "spawn");
   assert.equal(result.env.VLLM_DISABLE_COMPILE_CACHE, "1");
   assert.equal(result.env.SAFETENSORS_FAST_GPU, "1");
+  assert.equal(result.env.VLLM_USE_RUST_FRONTEND, undefined);
 });

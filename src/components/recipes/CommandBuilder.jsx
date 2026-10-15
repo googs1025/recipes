@@ -418,6 +418,13 @@ export function CommandBuilder({ recipe, strategies, taxonomy }) {
     && isVariantHardwareSupported(requestedVariant, requestedHwId, requestedHwProfile);
   const [hwId, setHwId] = useState(requestedHwAllowed ? requestedHwId : defaultHw);
 
+  useEffect(() => {
+    const profile = taxonomy.hardware_profiles?.[hwId] || {};
+    setFrontend((current) =>
+      resolveFrontend(recipe, current, taxonomy, profile, hwId)
+    );
+  }, [hwId, recipe, taxonomy]);
+
   // After mount: restore preferences from localStorage in two scopes.
   // URL params always win (explicit > stored).
   //   1. Global (hardware): tracks the user's physical setup, shared across
@@ -1180,7 +1187,7 @@ export function CommandBuilder({ recipe, strategies, taxonomy }) {
 
   // ── Handlers ──
   const selectFrontend = (value) => {
-    const next = resolveFrontend(recipe, value, taxonomy);
+    const next = resolveFrontend(recipe, value, taxonomy, hwProfile, hwId);
     setFrontend(next);
     syncUrl({ frontend: next });
     saveRecipeState(recipe.hf_id, { frontend: next });
@@ -2848,7 +2855,7 @@ export function CommandBuilder({ recipe, strategies, taxonomy }) {
           <ConfigRow label="Frontend">
             <PillGroup>
               {Object.entries(taxonomy.frontends || {}).map(([id, fe]) => {
-                const supported = isFrontendSupported(recipe, id);
+                const supported = isFrontendSupported(recipe, id, hwProfile, hwId);
                 // SMG gRPC always runs the Python servicer, so pin the pill to it.
                 const active = isSmgGrpc ? id === "python" : frontend === id;
                 const disabled = !supported || (isSmgGrpc && id !== "python");
@@ -2872,7 +2879,7 @@ export function CommandBuilder({ recipe, strategies, taxonomy }) {
             <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
               {isSmgGrpc ? (
                 "The SMG-compatible gRPC servicer runs through vllm serve --grpc."
-              ) : isFrontendSupported(recipe, "rust") ? (
+              ) : isFrontendSupported(recipe, "rust", hwProfile, hwId) ? (
                 <>
                   The experimental Rust frontend can improve throughput and latency, especially under high concurrency.
                   {" "}Switch to Python if you encounter unsupported features or compatibility issues.

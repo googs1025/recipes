@@ -62,6 +62,7 @@ export const OVERLAY_RULES = [
   ["hardware_overrides", "@hw"],
   ["hardware_notes", "@hw"],
   ["hardware_opt_in_features", "@hw"],
+  ["frontend_hardware", "*", "@hw"],
   ["strategy_hardware", "*", "@hw"],
   ["strategy_min_gpus", "@hw"],
   ["kv_cache_strategy_hardware", "*", "@hw"],

@@ -22,18 +22,32 @@ const NVL4_HW_IDS = new Set(["gb200", "gb300"]);
 // `model.<frontend>_frontend: unsupported` (e.g. `rust_frontend`).
 export const FALLBACK_FRONTEND = "python";
 
-export function isFrontendSupported(recipe, frontend) {
-  return frontend === FALLBACK_FRONTEND || recipe.model?.[`${frontend}_frontend`] !== "unsupported";
+export function isFrontendSupported(recipe, frontend, hwProfile = null, hwId = null) {
+  if (frontend === FALLBACK_FRONTEND) return true;
+  if (recipe.model?.[`${frontend}_frontend`] === "unsupported") return false;
+  return hardwareKeyedValue(
+    recipe.frontend_hardware?.[frontend],
+    hwProfile,
+    hwId,
+  ) !== "unsupported";
 }
 
 // Resolve the frontend a command is rendered for: the requested one (URL,
 // saved state, pill click), else the recipe's `default_frontend`, falling back
 // to Python when that frontend is unknown to the taxonomy or unsupported by the
 // recipe — so a stale `?frontend=rust` link can never emit a broken command.
-export function resolveFrontend(recipe, frontend, taxonomy) {
+export function resolveFrontend(
+  recipe,
+  frontend,
+  taxonomy,
+  hwProfile = null,
+  hwId = null,
+) {
   const wanted = frontend || recipe.model?.default_frontend;
   if (!wanted || !taxonomy?.frontends?.[wanted]) return FALLBACK_FRONTEND;
-  return isFrontendSupported(recipe, wanted) ? wanted : FALLBACK_FRONTEND;
+  return isFrontendSupported(recipe, wanted, hwProfile, hwId)
+    ? wanted
+    : FALLBACK_FRONTEND;
 }
 
 /**
@@ -1802,7 +1816,12 @@ export function resolveCommand(recipe, variantKey, strategyName, hwProfileId, en
       // The SMG-compatible gRPC servicer only runs on the Python frontend.
       env.VLLM_USE_RUST_FRONTEND = "0";
     } else {
-      Object.assign(env, taxonomy.frontends?.[resolveFrontend(recipe, frontend, taxonomy)]?.env);
+      Object.assign(
+        env,
+        taxonomy.frontends?.[
+          resolveFrontend(recipe, frontend, taxonomy, hwProfile, hwProfileId)
+        ]?.env,
+      );
     }
     return env;
   }

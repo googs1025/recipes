@@ -216,6 +216,10 @@ export function buildRecipeSchema({ taxonomy, strategies }) {
       features: { type: "object", additionalProperties: feature },
       opt_in_features: strings,
       hardware_opt_in_features: keyed(gpuId, strings),         // looked up by exact profile id
+      frontend_hardware: keyed(
+        { enum: frontends },
+        keyed(hwKey, { enum: ["supported", "unsupported"] }),
+      ),
       variants: { type: "object", required: ["default"], additionalProperties: variant },
       compatible_strategies: { type: "array", items: strategyId },
       default_strategy: strategyId,
