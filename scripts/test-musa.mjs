@@ -8,6 +8,7 @@ import {
   buildDockerArgv,
   buildDockerRun,
   computeDockerMeta,
+  resolveCommand,
 } from "../src/lib/command-synthesis.js";
 
 const MUSA_IMAGE =
@@ -128,4 +129,55 @@ test("taxonomy defines a restricted 2x MTT S5000 profile", () => {
     scalable: false,
     restricted: true,
   });
+});
+
+test("Qwen3.5-27B renders its documented 2x S5000 serving profile", () => {
+  const readYaml = (relativePath) =>
+    yaml.load(
+      fs.readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8"),
+    );
+  const taxonomy = readYaml("taxonomy.yaml");
+  const recipe = readYaml("models/Qwen/Qwen3.5-27B.yaml");
+  const strategy = readYaml("strategies/single_node_tp.yaml");
+  const strategies = { single_node_tp: strategy };
+  const result = resolveCommand(
+    recipe,
+    "default",
+    "single_node_tp",
+    "mtt_s5000_2x",
+    ["spec_decoding"],
+    strategies,
+    taxonomy,
+  );
+  const flag = (name) => result.argv[result.argv.indexOf(name) + 1];
+  const meta = computeDockerMeta(
+    recipe,
+    recipe.variants.default,
+    taxonomy.hardware_profiles.mtt_s5000_2x,
+    "mtt_s5000_2x",
+  );
+
+  assert.equal(recipe.meta.hardware.mtt_s5000_2x, "supported");
+  assert.deepEqual(recipe.hardware_opt_in_features.mtt_s5000_2x, [
+    "tool_calling",
+    "reasoning",
+    "encoder_parallel",
+  ]);
+  assert.equal(recipe.variants.default.hardware_overrides.mtt_s5000_2x.install.pip, false);
+  assert.equal(recipe.variants.fp8.hardware_overrides.mtt_s5000_2x.install.pip, false);
+  assert.equal(meta.image, MUSA_IMAGE);
+  assert.equal(flag("--tensor-parallel-size"), "2");
+  assert.equal(flag("--max-model-len"), "7168");
+  assert.equal(flag("--max-num-seqs"), "64");
+  assert.equal(flag("--attention-config"), '{"backend":"FLASH_ATTN"}');
+  assert.deepEqual(JSON.parse(flag("--speculative-config")), {
+    method: "mtp",
+    num_speculative_tokens: 1,
+  });
+  assert.ok(result.argv.includes("--no-enable-prefix-caching"));
+  assert.ok(result.argv.includes("--no-enable-chunked-prefill"));
+  assert.equal(result.env.VLLM_PLUGINS, "musa,musa_custom_ops");
+  assert.equal(result.env.VLLM_WORKER_MULTIPROC_METHOD, "spawn");
+  assert.equal(result.env.VLLM_DISABLE_COMPILE_CACHE, "1");
+  assert.equal(result.env.SAFETENSORS_FAST_GPU, "1");
 });
