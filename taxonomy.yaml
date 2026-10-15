@@ -301,6 +301,20 @@ hardware_profiles:
     vram_gb: 2304
     multi_node: false
 
+  # ── Moore Threads MUSA ──
+  # Restricted until an end-to-end model recipe opts into the validated
+  # two-card topology. Product reference: https://www.mthreads.com/product/S5000
+  mtt_s5000_2x:
+    brand: MooreThreads
+    generation: musa
+    display_name: "MTT S5000 2x"
+    description: "Moore Threads MTT S5000 · 2× 80 GB VRAM · MUSA backend"
+    gpu_count: 2
+    vram_gb: 160
+    multi_node: false
+    scalable: false
+    restricted: true
+
   # ── Google Cloud TPU ──
   # `restricted: true` hides these from the hardware picker unless the recipe
   # explicitly lists them in `meta.hardware` — TPU support requires a separate

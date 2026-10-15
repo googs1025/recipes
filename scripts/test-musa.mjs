@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
+
+import yaml from "js-yaml";
 
 import {
   buildDockerArgv,
@@ -106,4 +109,23 @@ test("NVIDIA Docker metadata remains unchanged", () => {
   assert.equal(meta.brandKey, "nvidia");
   assert.equal(meta.gpuFlags, "--gpus all");
   assert.equal(meta.isMusa, false);
+});
+
+test("taxonomy defines a restricted 2x MTT S5000 profile", () => {
+  const taxonomy = yaml.load(
+    fs.readFileSync(new URL("../taxonomy.yaml", import.meta.url), "utf8"),
+  );
+  const profile = taxonomy.hardware_profiles.mtt_s5000_2x;
+
+  assert.deepEqual(profile, {
+    brand: "MooreThreads",
+    generation: "musa",
+    display_name: "MTT S5000 2x",
+    description: "Moore Threads MTT S5000 · 2× 80 GB VRAM · MUSA backend",
+    gpu_count: 2,
+    vram_gb: 160,
+    multi_node: false,
+    scalable: false,
+    restricted: true,
+  });
 });
